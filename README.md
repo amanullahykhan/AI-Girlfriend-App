@@ -41,9 +41,6 @@ Developed by **Amanullah Khan**, Aisuru is a sleek, modern, and emotionally inte
 - **Kaito (Kuudere)**: Cool, calm, and sophisticated.
 - **Ren (Prince)**: Charming, romantic, and sweet.
 
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. Created and maintained by **Amanullah Khan**.
 
 ---
 
