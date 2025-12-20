@@ -43,7 +43,7 @@ Developed by **Amanullah Khan**, Aisuru is a sleek, modern, and emotionally inte
 
 ## 📜 License
 
-This project is created and maintained by **Amanullah Khan**. All visual assets and code are intended for the ultimate AI companion experience.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. Created and maintained by **Amanullah Khan**.
 
 ---
 
