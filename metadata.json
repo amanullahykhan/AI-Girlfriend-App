@@ -1,0 +1,8 @@
+{
+  "name": "Aisuru: Anime AI Companion",
+  "description": "A sleek, modern AI girlfriend experience with anime-style characters, emotional intelligence, voice interaction, and relationship building capabilities.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
