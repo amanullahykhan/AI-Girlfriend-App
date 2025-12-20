@@ -2,7 +2,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CharacterProfile, Message, Gender } from './types';
 import { CHARACTERS, Icons, LANGUAGES } from './constants';
-import { getCurrentUser, saveUser, clearAuth, getChatHistory, saveChatHistory } from './services/authService';
+import { 
+  subscribeToAuthChanges, 
+  signUpUser, 
+  loginUser, 
+  logoutUser, 
+  getChatHistory, 
+  saveChatHistory,
+  updateUserProfile 
+} from './services/authService';
+import { isPermissionError } from './services/firebase';
 import { generateAiResponse, generateSpeech } from './services/geminiService';
 import VoicePlayer from './components/VoicePlayer';
 import AnimatedAvatar from './components/AnimatedAvatar';
@@ -11,23 +20,36 @@ import AnimatedAvatar from './components/AnimatedAvatar';
 const AuthScreen: React.FC<{ onAuth: (user: User) => void }> = ({ onAuth }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [gender, setGender] = useState<Gender>('Male');
   const [language, setLanguage] = useState('en');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      email,
-      displayName: isLogin ? email.split('@')[0] : name,
-      gender: gender,
-      preference: gender === 'Male' ? 'Female' : 'Male',
-      language: language,
-      selectedCharacterId: ''
-    };
-    saveUser(newUser);
-    onAuth(newUser);
+    setError(null);
+    setLoading(true);
+    try {
+      if (isLogin) {
+        const user = await loginUser(email, password);
+        onAuth(user);
+      } else {
+        const user = await signUpUser(email, password, name, gender, language);
+        onAuth(user);
+      }
+    } catch (err: any) {
+      if (isPermissionError(err)) {
+        setError("Database access restricted. Using temporary local mode. Please configure Firebase Rules later.");
+        // Proceed with a dummy auth state if needed, but loginUser/signUpUser 
+        // will handle local fallback internally now.
+      } else {
+        setError(err.message || "An error occurred during authentication.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -38,26 +60,32 @@ const AuthScreen: React.FC<{ onAuth: (user: User) => void }> = ({ onAuth }) => {
       <div className="anime-card p-8 rounded-3xl w-full max-w-md shadow-2xl z-10 max-h-[90vh] overflow-y-auto custom-scrollbar">
         <div className="text-center mb-6">
           <h1 className="text-4xl font-bold font-brand text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-500 mb-2">Aisuru</h1>
-          <p className="text-slate-400">Your Living Anime Companion</p>
+          <p className="text-slate-400 text-sm">Your Living Anime Companion</p>
         </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs leading-relaxed text-center">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Display Name</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Display Name</label>
                 <input 
                   type="text" required value={name} onChange={e => setName(e.target.value)}
-                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white"
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white text-sm"
                   placeholder="How should I call you?"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Preferred Language</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Preferred Language</label>
                 <select 
                   value={language} 
                   onChange={e => setLanguage(e.target.value)}
-                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white appearance-none"
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white appearance-none text-sm"
                 >
                   {LANGUAGES.map(l => (
                     <option key={l.code} value={l.code} className="bg-slate-900">{l.name}</option>
@@ -65,12 +93,12 @@ const AuthScreen: React.FC<{ onAuth: (user: User) => void }> = ({ onAuth }) => {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Your Gender</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Your Gender</label>
                 <div className="grid grid-cols-2 gap-2">
                   {(['Male', 'Female'] as Gender[]).map(g => (
                     <button
                       key={g} type="button" onClick={() => setGender(g)}
-                      className={`py-2 rounded-xl border text-sm transition-all ${gender === g ? 'bg-pink-500 border-pink-400 text-white shadow-lg shadow-pink-500/20' : 'bg-slate-800/50 border-slate-700 text-slate-400'}`}
+                      className={`py-2.5 rounded-xl border text-xs font-bold transition-all ${gender === g ? 'bg-pink-500 border-pink-400 text-white shadow-lg shadow-pink-500/20' : 'bg-slate-800/50 border-slate-700 text-slate-400'}`}
                     >
                       {g}
                     </button>
@@ -80,29 +108,38 @@ const AuthScreen: React.FC<{ onAuth: (user: User) => void }> = ({ onAuth }) => {
             </>
           )}
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Email Address</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Email Address</label>
             <input 
               type="email" required value={email} onChange={e => setEmail(e.target.value)}
-              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white"
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white text-sm"
               placeholder="you@example.com"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Password</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Password</label>
             <input 
-              type="password" required
-              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white"
+              type="password" required value={password} onChange={e => setPassword(e.target.value)}
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white text-sm"
               placeholder="••••••••"
             />
           </div>
-          <button type="submit" className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-pink-500/20 transition-all transform hover:scale-[1.02] mt-4">
-            {isLogin ? 'Enter Aisuru' : 'Create Account'}
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-pink-500/20 transition-all transform hover:scale-[1.02] mt-4 disabled:opacity-50"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                Processing...
+              </span>
+            ) : (isLogin ? 'Enter Aisuru' : 'Create Account')}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm">
-          <button onClick={() => setIsLogin(!isLogin)} className="text-pink-400 hover:text-pink-300 transition-colors">
-            {isLogin ? "Don't have an account? Sign up" : "Already have an account? Log in"}
+        <div className="mt-8 text-center text-sm">
+          <button onClick={() => setIsLogin(!isLogin)} className="text-slate-400 hover:text-pink-400 transition-colors">
+            {isLogin ? "New here? Create an account" : "Already registered? Log in"}
           </button>
         </div>
       </div>
@@ -115,33 +152,34 @@ const CharacterSelect: React.FC<{ preference: Gender, onSelect: (char: Character
   const filtered = CHARACTERS.filter(c => c.gender === preference);
 
   return (
-    <div className="min-h-screen p-8 bg-slate-950">
+    <div className="min-h-screen p-8 bg-slate-950 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
         <header className="mb-12 text-center">
-          <h2 className="text-4xl font-bold font-brand mb-4">Choose Your Companion</h2>
-          <p className="text-slate-400 max-w-2xl mx-auto">Showing {preference.toLowerCase()} companions tailored to your preference.</p>
+          <h2 className="text-4xl font-bold font-brand mb-4 text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400">Choose Your Companion</h2>
+          <p className="text-slate-500 max-w-2xl mx-auto text-sm">Select the soul you'd like to build a relationship with.</p>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filtered.map(char => (
-            <div key={char.id} className="anime-card group rounded-3xl overflow-hidden hover:border-pink-500/50 transition-all cursor-pointer flex flex-col shadow-2xl" onClick={() => onSelect(char)}>
+            <div key={char.id} className="anime-card group rounded-3xl overflow-hidden hover:border-pink-500/50 transition-all cursor-pointer flex flex-col shadow-2xl transform hover:-translate-y-2" onClick={() => onSelect(char)}>
               <div className="relative h-72 overflow-hidden">
-                <img src={char.avatarUrl} alt={char.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
-                <div className="absolute bottom-4 left-6">
-                  <span className="px-3 py-1 bg-pink-500 text-[10px] font-bold rounded-full uppercase tracking-widest">{char.type}</span>
-                  <h3 className="text-3xl font-bold mt-2 font-brand">{char.name}</h3>
+                <img src={char.avatarUrl} alt={char.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-90"></div>
+                <div className="absolute bottom-6 left-6 right-6">
+                  <span className="px-3 py-1 bg-pink-500 text-[10px] font-bold rounded-full uppercase tracking-widest text-white">{char.type}</span>
+                  <h3 className="text-3xl font-bold mt-2 font-brand text-white">{char.name}</h3>
                 </div>
               </div>
-              <div className="p-6 flex-grow">
-                <p className="text-slate-300 text-sm leading-relaxed mb-6 line-clamp-3">{char.description}</p>
-                <div className="flex items-center text-[10px] font-bold text-slate-500 space-x-4 uppercase">
-                  <div className="flex items-center"><Icons.Heart /><span className="ml-1">Animated</span></div>
-                  <div className="flex items-center"><Icons.Volume /><span className="ml-1">Multilingual</span></div>
+              <div className="p-6 flex-grow flex flex-col">
+                <p className="text-slate-400 text-sm leading-relaxed mb-6 line-clamp-3 italic">"{char.description}"</p>
+                <div className="mt-auto flex items-center text-[10px] font-bold text-slate-500 space-x-4 uppercase tracking-tighter">
+                  <div className="flex items-center"><Icons.Heart /><span className="ml-1">Emotional</span></div>
+                  <div className="flex items-center"><Icons.Volume /><span className="ml-1">Spoken</span></div>
+                  <div className="flex items-center"><Icons.Image /><span className="ml-1">Vision</span></div>
                 </div>
               </div>
               <div className="p-6 pt-0">
-                <button className="w-full bg-slate-800 group-hover:bg-pink-500 text-white font-semibold py-3 rounded-xl transition-all">Connect with {char.name}</button>
+                <button className="w-full bg-slate-800/80 group-hover:bg-pink-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg">Start Journey</button>
               </div>
             </div>
           ))}
@@ -166,14 +204,16 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
   const languageName = LANGUAGES.find(l => l.code === user.language)?.name || 'English';
 
   useEffect(() => {
-    const history = getChatHistory(user.id, character.id);
-    setMessages(history.length > 0 ? history : []);
+    const loadHistory = async () => {
+      const history = await getChatHistory(user.id, character.id);
+      setMessages(history);
+    };
+    loadHistory();
   }, [user.id, character.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     if (messages.length > 0) {
-      // Fix: Passed user.language as an argument to saveChatHistory to match the updated signature.
       saveChatHistory(user.id, character.id, user.language, messages);
       const lastModelMsg = [...messages].reverse().find(m => m.role === 'model');
       if (lastModelMsg) {
@@ -276,7 +316,7 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
           </div>
         </div>
         <div className="absolute bottom-6 right-6 lg:left-6 z-20 flex flex-col items-start">
-           <button onClick={onLogout} className="text-[10px] font-bold text-slate-400 hover:text-white transition-colors bg-black/40 backdrop-blur-md px-4 py-2 rounded-full uppercase tracking-tighter border border-white/5 shadow-2xl">Return to Choice</button>
+           <button onClick={onLogout} className="text-[10px] font-bold text-slate-400 hover:text-white transition-colors bg-black/40 backdrop-blur-md px-4 py-2 rounded-full uppercase tracking-tighter border border-white/5 shadow-2xl">Log Out</button>
         </div>
       </section>
 
@@ -292,7 +332,7 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
         </header>
 
         <div className="flex-grow overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar bg-slate-950/40">
-          {messages.length === 0 && (
+          {messages.length === 0 && !isTyping && (
             <div className="h-full flex flex-col items-center justify-center text-center p-8">
               <div className="w-16 h-16 rounded-full bg-pink-500/5 flex items-center justify-center mb-4 border border-pink-500/20 animate-pulse">
                 <Icons.Heart />
@@ -307,7 +347,7 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
                 {msg.imageUrl && (
                   <img src={msg.imageUrl} alt="Attached" className="rounded-xl mb-3 max-h-56 w-full object-cover border border-white/10" />
                 )}
-                <p className="text-sm md:text-base leading-relaxed text-slate-100">
+                <p className="text-sm md:text-base leading-relaxed text-slate-100 whitespace-pre-wrap">
                   {msg.content}
                 </p>
                 <div className="flex items-center justify-between mt-3">
@@ -319,6 +359,17 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
               </div>
             </div>
           ))}
+          {isTyping && (
+            <div className="flex justify-start">
+              <div className="anime-card p-4 rounded-2xl rounded-tl-none border border-white/5 shadow-xl">
+                <div className="flex space-x-1">
+                  <div className="w-1.5 h-1.5 bg-pink-500 rounded-full animate-bounce"></div>
+                  <div className="w-1.5 h-1.5 bg-pink-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                  <div className="w-1.5 h-1.5 bg-pink-500 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                </div>
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -358,27 +409,39 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (u) {
+    const unsubscribe = subscribeToAuthChanges((u) => {
       setUser(u);
-      if (u.selectedCharacterId) {
+      if (u?.selectedCharacterId) {
         const char = CHARACTERS.find(c => c.id === u.selectedCharacterId);
         if (char) setSelectedCharacter(char);
+      } else {
+        setSelectedCharacter(null);
       }
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
   const handleAuth = (u: User) => setUser(u);
-  const handleCharSelect = (char: CharacterProfile) => {
+  
+  const handleCharSelect = async (char: CharacterProfile) => {
     if (user) {
       const updatedUser = { ...user, selectedCharacterId: char.id };
-      saveUser(updatedUser);
-      setUser(updatedUser);
+      try {
+        await updateUserProfile(updatedUser);
+        setUser(updatedUser);
+      } catch (err) {
+        // Fallback handled by service
+      }
     }
     setSelectedCharacter(char);
   };
-  const handleLogout = () => { clearAuth(); setUser(null); setSelectedCharacter(null); };
+
+  const handleLogout = async () => { 
+    await logoutUser();
+    setUser(null); 
+    setSelectedCharacter(null); 
+  };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-pink-500 font-brand text-2xl animate-pulse">Aisuru...</div>;
   if (!user) return <AuthScreen onAuth={handleAuth} />;
