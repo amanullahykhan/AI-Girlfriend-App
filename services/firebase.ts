@@ -23,12 +23,12 @@ import { getFirestore } from "firebase/firestore";
  */
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDf71xE-ad2KuKcSMl0wtdAdKqkAKZqbBU",
-  authDomain: "multichat-pro-1fb54.firebaseapp.com",
-  projectId: "multichat-pro-1fb54",
-  storageBucket: "multichat-pro-1fb54.firebasestorage.app",
-  messagingSenderId: "967204189620",
-  appId: "1:967204189620:web:c790b0c8ee3f6608a2eee1",
+  apiKey: "AIzaSyDf71xE-YOUR-API",
+  authDomain: "YOUR-FIREBASE-DOMAIN.firebaseapp.com",
+  projectId: "YOUR-PROJECT-ID",
+  storageBucket: "YOUR-SOTRAGE.firebasestorage.app",
+  messagingSenderId: "xxxxxxxx",
+  appId: "x:xxxxxxx,x-xxxxxxxx",
   measurementId: "G-DPCNLNEM4J"
 };
 
