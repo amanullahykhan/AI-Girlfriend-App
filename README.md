@@ -1,50 +1,20 @@
-# Aisuru: Your Living Anime Companion
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-Developed by **Amanullah Khan**, Aisuru is a sleek, modern, and emotionally intelligent AI companion application designed to provide a human-like relationship experience through highly refined anime characters.
+# Run and deploy your AI Studio app
 
-## 🌟 Features
+This contains everything you need to run your app locally.
 
-- **Live Animated Characters**: Experience "Live2D-lite" visual effects including natural breathing animations, eye-blinking, and dynamic head movements that follow your mouse cursor.
-- **Multilingual Support**: Chat with your companion in multiple languages including English, Japanese, Korean, Spanish, French, German, Chinese, and Hindi.
-- **Gender-Based Preferences**: Tailored character selection based on your identity and preferences.
-- **Multimodal Interaction**:
-  - **Text Chat**: Deep, context-aware conversations.
-  - **Speech-to-Text**: Talk directly to your companion using your microphone.
-  - **Voice Output**: Every character has a unique, high-quality voice for spoken responses.
-  - **Vision Capabilities**: Send images to your companion; they can see and discuss the details of what you share.
-- **Emotional Intelligence**: Characters exhibit moods, gestures, and curiosity. They react visually (blushing, pouting, dancing) based on the conversation flow.
-- **Persistent Memory**: Separate chat records for every user, allowing your relationship to grow over time.
+View your app in AI Studio: https://ai.studio/apps/drive/12BbCAGnleYTG4LRNiv-ZaLtXz1MPSn8N
 
-## 🛠️ Tech Stack
+## Run Locally
 
-- **Frontend**: React 19, TypeScript, Tailwind CSS.
-- **AI Engine**: Advanced Large Language Models for reasoning, vision, and natural language processing.
-- **Audio**: Real-time PCM audio decoding for high-fidelity voice synthesis.
-- **Animations**: Custom CSS3 Keyframes and hardware-accelerated transforms for smooth character movement.
-- **Persistence**: Structured data management for user profiles and chat histories.
+**Prerequisites:**  Node.js
 
-## 🚀 Getting Started
 
-1. **Clone the Repository**:
-   ```bash
-   git clone [repository-url]
-   ```
-2. **Configure Environment**:
-   Ensure you have your API key configured in your environment variables.
-3. **Launch the App**:
-   Open `index.html` in a modern web browser supporting ES modules.
-
-## 🎨 Characters
-
-- **Yuki (Dandere)**: Shy and soft-spoken, blushes easily.
-- **Rin (Tsundere)**: Sharp-tongued but has a golden heart.
-- **Kaito (Kuudere)**: Cool, calm, and sophisticated.
-- **Ren (Prince)**: Charming, romantic, and sweet.
-
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. Created and maintained by **Amanullah Khan**.
-
----
-
-*“Speak your heart, and I will listen.”*
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

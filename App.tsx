@@ -1,55 +1,27 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, CharacterProfile, Message, Gender } from './types';
-import { CHARACTERS, Icons, LANGUAGES } from './constants';
-import { 
-  subscribeToAuthChanges, 
-  signUpUser, 
-  loginUser, 
-  logoutUser, 
-  getChatHistory, 
-  saveChatHistory,
-  updateUserProfile 
-} from './services/authService';
-import { isPermissionError } from './services/firebase';
+import { User, CharacterProfile, Message } from './types';
+import { CHARACTERS, Icons } from './constants';
+import { getCurrentUser, saveUser, clearAuth, getChatHistory, saveChatHistory } from './services/authService';
 import { generateAiResponse, generateSpeech } from './services/geminiService';
 import VoicePlayer from './components/VoicePlayer';
-import AnimatedAvatar from './components/AnimatedAvatar';
 
 // --- Auth Component ---
 const AuthScreen: React.FC<{ onAuth: (user: User) => void }> = ({ onAuth }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [gender, setGender] = useState<Gender>('Male');
-  const [language, setLanguage] = useState('en');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      if (isLogin) {
-        const user = await loginUser(email, password);
-        onAuth(user);
-      } else {
-        const user = await signUpUser(email, password, name, gender, language);
-        onAuth(user);
-      }
-    } catch (err: any) {
-      if (isPermissionError(err)) {
-        setError("Database access restricted. Using temporary local mode. Please configure Firebase Rules later.");
-        // Proceed with a dummy auth state if needed, but loginUser/signUpUser 
-        // will handle local fallback internally now.
-      } else {
-        setError(err.message || "An error occurred during authentication.");
-      }
-    } finally {
-      setLoading(false);
-    }
+    const newUser: User = {
+      id: Math.random().toString(36).substr(2, 9),
+      email,
+      displayName: isLogin ? email.split('@')[0] : name,
+      selectedCharacterId: ''
+    };
+    saveUser(newUser);
+    onAuth(newUser);
   };
 
   return (
@@ -57,89 +29,47 @@ const AuthScreen: React.FC<{ onAuth: (user: User) => void }> = ({ onAuth }) => {
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-pink-500/10 blur-[120px] rounded-full"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[120px] rounded-full"></div>
       
-      <div className="anime-card p-8 rounded-3xl w-full max-w-md shadow-2xl z-10 max-h-[90vh] overflow-y-auto custom-scrollbar">
-        <div className="text-center mb-6">
+      <div className="anime-card p-8 rounded-3xl w-full max-w-md shadow-2xl z-10">
+        <div className="text-center mb-8">
           <h1 className="text-4xl font-bold font-brand text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-500 mb-2">Aisuru</h1>
-          <p className="text-slate-400 text-sm">Your Living Anime Companion</p>
+          <p className="text-slate-400">Find your perfect anime companion</p>
         </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs leading-relaxed text-center">
-            {error}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
-            <>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Display Name</label>
-                <input 
-                  type="text" required value={name} onChange={e => setName(e.target.value)}
-                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white text-sm"
-                  placeholder="How should I call you?"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Preferred Language</label>
-                <select 
-                  value={language} 
-                  onChange={e => setLanguage(e.target.value)}
-                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white appearance-none text-sm"
-                >
-                  {LANGUAGES.map(l => (
-                    <option key={l.code} value={l.code} className="bg-slate-900">{l.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Your Gender</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['Male', 'Female'] as Gender[]).map(g => (
-                    <button
-                      key={g} type="button" onClick={() => setGender(g)}
-                      className={`py-2.5 rounded-xl border text-xs font-bold transition-all ${gender === g ? 'bg-pink-500 border-pink-400 text-white shadow-lg shadow-pink-500/20' : 'bg-slate-800/50 border-slate-700 text-slate-400'}`}
-                    >
-                      {g}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">Display Name</label>
+              <input 
+                type="text" required value={name} onChange={e => setName(e.target.value)}
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white"
+                placeholder="How should I call you?"
+              />
+            </div>
           )}
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Email Address</label>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Email Address</label>
             <input 
               type="email" required value={email} onChange={e => setEmail(e.target.value)}
-              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white text-sm"
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white"
               placeholder="you@example.com"
             />
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Password</label>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Password</label>
             <input 
-              type="password" required value={password} onChange={e => setPassword(e.target.value)}
-              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white text-sm"
+              type="password" required
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/50 text-white"
               placeholder="••••••••"
             />
           </div>
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-pink-500/20 transition-all transform hover:scale-[1.02] mt-4 disabled:opacity-50"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                Processing...
-              </span>
-            ) : (isLogin ? 'Enter Aisuru' : 'Create Account')}
+          <button type="submit" className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-pink-500/20 transition-all transform hover:scale-[1.02]">
+            {isLogin ? 'Enter Aisuru' : 'Create Account'}
           </button>
         </form>
 
-        <div className="mt-8 text-center text-sm">
-          <button onClick={() => setIsLogin(!isLogin)} className="text-slate-400 hover:text-pink-400 transition-colors">
-            {isLogin ? "New here? Create an account" : "Already registered? Log in"}
+        <div className="mt-6 text-center text-sm">
+          <button onClick={() => setIsLogin(!isLogin)} className="text-pink-400 hover:text-pink-300 transition-colors">
+            {isLogin ? "Don't have an account? Sign up" : "Already have an account? Log in"}
           </button>
         </div>
       </div>
@@ -148,38 +78,35 @@ const AuthScreen: React.FC<{ onAuth: (user: User) => void }> = ({ onAuth }) => {
 };
 
 // --- Character Selection Component ---
-const CharacterSelect: React.FC<{ preference: Gender, onSelect: (char: CharacterProfile) => void }> = ({ preference, onSelect }) => {
-  const filtered = CHARACTERS.filter(c => c.gender === preference);
-
+const CharacterSelect: React.FC<{ onSelect: (char: CharacterProfile) => void }> = ({ onSelect }) => {
   return (
-    <div className="min-h-screen p-8 bg-slate-950 overflow-y-auto">
+    <div className="min-h-screen p-8 bg-slate-950">
       <div className="max-w-6xl mx-auto">
         <header className="mb-12 text-center">
-          <h2 className="text-4xl font-bold font-brand mb-4 text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400">Choose Your Companion</h2>
-          <p className="text-slate-500 max-w-2xl mx-auto text-sm">Select the soul you'd like to build a relationship with.</p>
+          <h2 className="text-4xl font-bold font-brand mb-4">Choose Your Companion</h2>
+          <p className="text-slate-400 max-w-2xl mx-auto">Select a character that resonates with your personality. Each has a unique heart, voice, and way of looking at the world.</p>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filtered.map(char => (
-            <div key={char.id} className="anime-card group rounded-3xl overflow-hidden hover:border-pink-500/50 transition-all cursor-pointer flex flex-col shadow-2xl transform hover:-translate-y-2" onClick={() => onSelect(char)}>
-              <div className="relative h-72 overflow-hidden">
-                <img src={char.avatarUrl} alt={char.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-90"></div>
-                <div className="absolute bottom-6 left-6 right-6">
-                  <span className="px-3 py-1 bg-pink-500 text-[10px] font-bold rounded-full uppercase tracking-widest text-white">{char.type}</span>
-                  <h3 className="text-3xl font-bold mt-2 font-brand text-white">{char.name}</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {CHARACTERS.map(char => (
+            <div key={char.id} className="anime-card group rounded-3xl overflow-hidden hover:border-pink-500/50 transition-all cursor-pointer flex flex-col" onClick={() => onSelect(char)}>
+              <div className="relative h-64 overflow-hidden">
+                <img src={char.avatarUrl} alt={char.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
+                <div className="absolute bottom-4 left-6">
+                  <span className="px-3 py-1 bg-pink-500 text-xs font-bold rounded-full uppercase tracking-widest">{char.type}</span>
+                  <h3 className="text-3xl font-bold mt-2 font-brand">{char.name}</h3>
                 </div>
               </div>
-              <div className="p-6 flex-grow flex flex-col">
-                <p className="text-slate-400 text-sm leading-relaxed mb-6 line-clamp-3 italic">"{char.description}"</p>
-                <div className="mt-auto flex items-center text-[10px] font-bold text-slate-500 space-x-4 uppercase tracking-tighter">
-                  <div className="flex items-center"><Icons.Heart /><span className="ml-1">Emotional</span></div>
-                  <div className="flex items-center"><Icons.Volume /><span className="ml-1">Spoken</span></div>
-                  <div className="flex items-center"><Icons.Image /><span className="ml-1">Vision</span></div>
+              <div className="p-6 flex-grow">
+                <p className="text-slate-300 text-sm leading-relaxed mb-6">{char.description}</p>
+                <div className="flex items-center text-xs text-slate-500 space-x-4">
+                  <div className="flex items-center"><Icons.Heart /><span className="ml-1">Relationship Ready</span></div>
+                  <div className="flex items-center"><Icons.Volume /><span className="ml-1">Voice Enabled</span></div>
                 </div>
               </div>
               <div className="p-6 pt-0">
-                <button className="w-full bg-slate-800/80 group-hover:bg-pink-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg">Start Journey</button>
+                <button className="w-full bg-slate-800 group-hover:bg-pink-500 text-white font-semibold py-3 rounded-xl transition-colors">Connect with {char.name}</button>
               </div>
             </div>
           ))}
@@ -198,30 +125,17 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const [currentEmotion, setCurrentEmotion] = useState<string | undefined>();
-  const [currentGesture, setCurrentGesture] = useState<string | undefined>();
-
-  const languageName = LANGUAGES.find(l => l.code === user.language)?.name || 'English';
-
   useEffect(() => {
-    const loadHistory = async () => {
-      const history = await getChatHistory(user.id, character.id);
-      setMessages(history);
-    };
-    loadHistory();
+    const history = getChatHistory(user.id, character.id);
+    setMessages(history.length > 0 ? history : []);
   }, [user.id, character.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     if (messages.length > 0) {
-      saveChatHistory(user.id, character.id, user.language, messages);
-      const lastModelMsg = [...messages].reverse().find(m => m.role === 'model');
-      if (lastModelMsg) {
-        setCurrentEmotion(lastModelMsg.emotion);
-        setCurrentGesture(lastModelMsg.gesture);
-      }
+      saveChatHistory(user.id, character.id, messages);
     }
-  }, [messages, user.id, character.id, user.language]);
+  }, [messages, user.id, character.id]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -249,21 +163,12 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
     setIsTyping(true);
 
     try {
-      const aiResponseRaw = await generateAiResponse(
+      const aiResponse = await generateAiResponse(
         inputText,
-        messages.slice(-10),
+        messages.slice(-10), // Context window
         character,
-        languageName,
         userMessage.imageUrl
       );
-
-      const emotionMatch = aiResponseRaw?.match(/\*([A-Z][a-z]+)\*/);
-      const gestureMatch = aiResponseRaw?.match(/\*([A-Z][a-z]+)\*/g);
-      
-      const emotion = emotionMatch ? emotionMatch[1] : undefined;
-      const gesture = gestureMatch && gestureMatch.length > 1 ? gestureMatch[1].replace(/\*/g, '') : undefined;
-      
-      const aiResponse = aiResponseRaw?.replace(/\*.*?\*/g, '').trim();
 
       const voiceData = await generateSpeech(aiResponse || "", character.voiceName);
 
@@ -272,9 +177,7 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
         role: 'model',
         content: aiResponse || "...",
         timestamp: Date.now(),
-        audioUrl: voiceData,
-        emotion,
-        gesture
+        audioUrl: voiceData
       };
 
       setMessages(prev => [...prev, modelMessage]);
@@ -285,11 +188,15 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
     }
   };
 
+  // Speech to Text (Web Speech API)
   const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("Speech recognition not supported in this browser.");
+    if (!SpeechRecognition) {
+      alert("Speech recognition not supported in this browser.");
+      return;
+    }
     const recognition = new SpeechRecognition();
-    recognition.lang = user.language || 'en-US';
+    recognition.lang = 'en-US';
     recognition.start();
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
@@ -298,60 +205,80 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-screen bg-slate-950 overflow-hidden">
-      <section className="h-[45vh] lg:h-full lg:w-[40%] border-b lg:border-r border-slate-800 bg-slate-900/50 flex flex-col relative overflow-hidden">
-        <AnimatedAvatar 
-          avatarUrl={character.avatarUrl} 
-          emotion={currentEmotion} 
-          gesture={currentGesture} 
-          isTyping={isTyping} 
-        />
-        <div className="absolute top-6 left-6 z-20">
-          <div className="flex flex-col">
-            <h2 className="text-3xl font-bold font-brand text-pink-500 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{character.name}</h2>
-            <div className="flex gap-2 mt-1">
-              <span className="text-[10px] text-pink-400 font-bold bg-pink-500/10 px-2 py-0.5 rounded-full uppercase tracking-widest">{character.type}</span>
-              <span className="text-[10px] text-blue-400 font-bold bg-blue-500/10 px-2 py-0.5 rounded-full uppercase tracking-widest">{languageName}</span>
+    <div className="flex h-screen bg-slate-950 overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-80 border-r border-slate-800 bg-slate-900/50 hidden lg:flex flex-col">
+        <div className="p-6 border-bottom border-slate-800">
+          <h1 className="text-2xl font-bold font-brand text-pink-500">Aisuru</h1>
+        </div>
+        <div className="p-6 flex flex-col items-center text-center flex-grow">
+          <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-pink-500/30 mb-4 shadow-xl shadow-pink-500/10">
+            <img src={character.avatarUrl} alt={character.name} className="w-full h-full object-cover" />
+          </div>
+          <h2 className="text-xl font-bold mb-1">{character.name}</h2>
+          <span className="text-xs text-pink-400 font-bold uppercase tracking-widest px-2 py-0.5 bg-pink-500/10 rounded-full mb-4">{character.type}</span>
+          <p className="text-sm text-slate-400 mb-6 italic">"{character.personality}"</p>
+          
+          <div className="w-full bg-slate-800/50 rounded-2xl p-4 text-left">
+            <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Companion Stats</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span>Affection</span>
+                <span className="text-pink-400">Level 5</span>
+              </div>
+              <div className="w-full bg-slate-700 h-1.5 rounded-full">
+                <div className="bg-pink-500 h-full rounded-full w-[65%]"></div>
+              </div>
             </div>
           </div>
         </div>
-        <div className="absolute bottom-6 right-6 lg:left-6 z-20 flex flex-col items-start">
-           <button onClick={onLogout} className="text-[10px] font-bold text-slate-400 hover:text-white transition-colors bg-black/40 backdrop-blur-md px-4 py-2 rounded-full uppercase tracking-tighter border border-white/5 shadow-2xl">Log Out</button>
+        <div className="p-6 border-t border-slate-800">
+          <button onClick={onLogout} className="w-full py-2 text-sm text-slate-500 hover:text-white transition-colors">Switch Character / Logout</button>
         </div>
-      </section>
+      </aside>
 
-      <main className="flex-grow flex flex-col relative h-[55vh] lg:h-full shadow-[-20px_0_50px_rgba(0,0,0,0.5)] z-10">
-        <header className="h-14 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between px-6 backdrop-blur-xl sticky top-0 z-20">
-          <div className="flex items-center text-[10px] font-bold text-green-400">
-            <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-2 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></span>
-            LIVING CONNECTION
+      {/* Main Chat Area */}
+      <main className="flex-grow flex flex-col relative">
+        {/* Header */}
+        <header className="h-16 border-b border-slate-800 bg-slate-900/30 flex items-center justify-between px-6 backdrop-blur-md sticky top-0 z-20">
+          <div className="flex items-center">
+            <div className="lg:hidden w-8 h-8 rounded-full overflow-hidden mr-3">
+              <img src={character.avatarUrl} alt={character.name} className="w-full h-full object-cover" />
+            </div>
+            <div>
+              <h3 className="font-bold">{character.name}</h3>
+              <div className="flex items-center text-[10px] text-green-400">
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1.5 animate-pulse"></span>
+                ACTIVE NOW
+              </div>
+            </div>
           </div>
-          <div className="flex space-x-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-             Aisuru Interface v2.5
+          <div className="flex space-x-3">
+            <button className="p-2 text-slate-400 hover:text-white"><Icons.Heart /></button>
           </div>
         </header>
 
-        <div className="flex-grow overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar bg-slate-950/40">
-          {messages.length === 0 && !isTyping && (
-            <div className="h-full flex flex-col items-center justify-center text-center p-8">
-              <div className="w-16 h-16 rounded-full bg-pink-500/5 flex items-center justify-center mb-4 border border-pink-500/20 animate-pulse">
+        {/* Messages */}
+        <div className="flex-grow overflow-y-auto p-6 space-y-6 custom-scrollbar">
+          {messages.length === 0 && (
+            <div className="h-full flex flex-col items-center justify-center text-center text-slate-500">
+              <div className="w-20 h-20 bg-pink-500/5 rounded-full flex items-center justify-center mb-4">
                 <Icons.Heart />
               </div>
-              <h3 className="text-slate-300 font-brand font-bold text-xl mb-2">Speak your heart...</h3>
-              <p className="text-slate-500 text-sm max-w-xs">I am here and listening in {languageName}.</p>
+              <p>Start a conversation with {character.name}.<br/>Tell her about your day!</p>
             </div>
           )}
           {messages.map((msg) => (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[90%] md:max-w-[80%] ${msg.role === 'user' ? 'bg-indigo-600/90 shadow-indigo-500/10' : 'anime-card shadow-pink-500/5'} p-4 rounded-2xl ${msg.role === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'} shadow-xl border border-white/5`}>
+              <div className={`max-w-[85%] md:max-w-[70%] ${msg.role === 'user' ? 'bg-indigo-600 rounded-2xl rounded-tr-none' : 'anime-card rounded-2xl rounded-tl-none'} p-4 shadow-lg`}>
                 {msg.imageUrl && (
-                  <img src={msg.imageUrl} alt="Attached" className="rounded-xl mb-3 max-h-56 w-full object-cover border border-white/10" />
+                  <img src={msg.imageUrl} alt="Attached" className="rounded-lg mb-3 max-h-60 w-full object-cover border border-white/10" />
                 )}
-                <p className="text-sm md:text-base leading-relaxed text-slate-100 whitespace-pre-wrap">
+                <p className="text-sm md:text-base whitespace-pre-wrap leading-relaxed">
                   {msg.content}
                 </p>
-                <div className="flex items-center justify-between mt-3">
-                   <span className="text-[10px] font-medium text-slate-500">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <div className="flex items-center justify-between mt-2">
+                   <span className="text-[10px] opacity-40">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                    {msg.role === 'model' && msg.audioUrl && (
                      <VoicePlayer base64Audio={msg.audioUrl} autoPlay={msg.id === messages[messages.length - 1].id} />
                    )}
@@ -361,39 +288,49 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
           ))}
           {isTyping && (
             <div className="flex justify-start">
-              <div className="anime-card p-4 rounded-2xl rounded-tl-none border border-white/5 shadow-xl">
-                <div className="flex space-x-1">
-                  <div className="w-1.5 h-1.5 bg-pink-500 rounded-full animate-bounce"></div>
-                  <div className="w-1.5 h-1.5 bg-pink-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                  <div className="w-1.5 h-1.5 bg-pink-500 rounded-full animate-bounce [animation-delay:0.4s]"></div>
-                </div>
+              <div className="anime-card rounded-2xl rounded-tl-none p-4 flex space-x-1 items-center">
+                <div className="w-1.5 h-1.5 bg-pink-400 rounded-full animate-bounce"></div>
+                <div className="w-1.5 h-1.5 bg-pink-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                <div className="w-1.5 h-1.5 bg-pink-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
               </div>
             </div>
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="p-4 md:p-6 bg-slate-900/60 backdrop-blur-2xl border-t border-slate-800">
+        {/* Input Area */}
+        <div className="p-4 md:p-6 bg-slate-950/80 backdrop-blur-md border-t border-slate-800">
           {selectedImage && (
-            <div className="mb-4 relative inline-block group">
-              <img src={selectedImage} alt="Preview" className="h-20 w-20 object-cover rounded-xl border-2 border-pink-500 shadow-lg" />
-              <button onClick={() => setSelectedImage(null)} className="absolute -top-2 -right-2 bg-pink-500 rounded-full p-1.5 text-white shadow-lg transition-transform hover:scale-110 active:scale-90">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <div className="mb-4 relative inline-block">
+              <img src={selectedImage} alt="Preview" className="h-20 w-20 object-cover rounded-xl border-2 border-pink-500" />
+              <button onClick={() => setSelectedImage(null)} className="absolute -top-2 -right-2 bg-pink-500 rounded-full p-1 text-white shadow-lg">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </button>
             </div>
           )}
-          <div className="flex items-end gap-2 max-w-5xl mx-auto">
-            <div className="flex gap-1">
-              <button onClick={() => fileInputRef.current?.click()} className="p-3 text-slate-400 hover:text-pink-400 hover:bg-pink-500/10 rounded-xl transition-all active:scale-90"><Icons.Image /><input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" /></button>
-              <button onClick={startListening} className="p-3 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-all active:scale-90"><Icons.Mic /></button>
+          <div className="flex items-end space-x-3">
+            <button onClick={() => fileInputRef.current?.click()} className="p-3 text-slate-400 hover:text-pink-400 hover:bg-pink-500/10 rounded-xl transition-all">
+              <Icons.Image />
+              <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+            </button>
+            <button onClick={startListening} className="p-3 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-all">
+              <Icons.Mic />
+            </button>
+            <div className="flex-grow relative">
+              <textarea 
+                rows={1}
+                value={inputText}
+                onChange={e => setInputText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
+                placeholder={`Talk to ${character.name}...`}
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3 text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-pink-500/50 resize-none max-h-32"
+              />
             </div>
-            <textarea 
-              rows={1} value={inputText} onChange={e => setInputText(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
-              placeholder={`Write in ${languageName}...`}
-              className="flex-grow bg-slate-800/40 border border-slate-700/50 rounded-2xl px-5 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500/50 resize-none max-h-32 shadow-inner transition-all"
-            />
-            <button onClick={handleSendMessage} disabled={!inputText.trim() && !selectedImage} className="p-4 bg-pink-500 hover:bg-pink-600 disabled:opacity-50 text-white rounded-2xl shadow-lg shadow-pink-500/20 transition-all active:scale-95 flex items-center justify-center">
+            <button 
+              onClick={handleSendMessage}
+              disabled={!inputText.trim() && !selectedImage}
+              className="p-3 bg-pink-500 hover:bg-pink-600 disabled:opacity-50 disabled:hover:bg-pink-500 text-white rounded-xl shadow-lg shadow-pink-500/20 transition-all transform active:scale-95"
+            >
               <Icons.Send />
             </button>
           </div>
@@ -403,49 +340,54 @@ const ChatScreen: React.FC<{ user: User, character: CharacterProfile, onLogout: 
   );
 };
 
+// --- Main App Controller ---
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [selectedCharacter, setSelectedCharacter] = useState<CharacterProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = subscribeToAuthChanges((u) => {
+    const u = getCurrentUser();
+    if (u) {
       setUser(u);
-      if (u?.selectedCharacterId) {
+      if (u.selectedCharacterId) {
         const char = CHARACTERS.find(c => c.id === u.selectedCharacterId);
         if (char) setSelectedCharacter(char);
-      } else {
-        setSelectedCharacter(null);
       }
-      setIsLoading(false);
-    });
-    return () => unsubscribe();
+    }
+    setIsLoading(false);
   }, []);
 
-  const handleAuth = (u: User) => setUser(u);
-  
-  const handleCharSelect = async (char: CharacterProfile) => {
+  const handleAuth = (u: User) => {
+    setUser(u);
+  };
+
+  const handleCharSelect = (char: CharacterProfile) => {
     if (user) {
       const updatedUser = { ...user, selectedCharacterId: char.id };
-      try {
-        await updateUserProfile(updatedUser);
-        setUser(updatedUser);
-      } catch (err) {
-        // Fallback handled by service
-      }
+      saveUser(updatedUser);
+      setUser(updatedUser);
     }
     setSelectedCharacter(char);
   };
 
-  const handleLogout = async () => { 
-    await logoutUser();
-    setUser(null); 
-    setSelectedCharacter(null); 
+  const handleLogout = () => {
+    clearAuth();
+    setUser(null);
+    setSelectedCharacter(null);
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-pink-500 font-brand text-2xl animate-pulse">Aisuru...</div>;
-  if (!user) return <AuthScreen onAuth={handleAuth} />;
-  if (!selectedCharacter) return <CharacterSelect preference={user.preference} onSelect={handleCharSelect} />;
 
-  return <ChatScreen user={user} character={selectedCharacter} onLogout={handleLogout} />;
+  if (!user) {
+    return <AuthScreen onAuth={handleAuth} />;
+  }
+
+  if (!selectedCharacter) {
+    return <CharacterSelect onSelect={handleCharSelect} />;
+  }
+
+  return (
+    <ChatScreen user={user} character={selectedCharacter} onLogout={handleLogout} />
+  );
 }
