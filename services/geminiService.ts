@@ -1,8 +1,5 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 import { Message, CharacterProfile } from "../types";
-
-// Always initialize GoogleGenAI inside calling functions using process.env.API_KEY directly.
 
 export const generateAiResponse = async (
   prompt: string,
@@ -10,21 +7,24 @@ export const generateAiResponse = async (
   character: CharacterProfile,
   imageBase64?: string
 ) => {
-  // Use strictly the required initialization format.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Use the required initialization format.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
   const model = "gemini-3-flash-preview";
 
+  // Prepare history parts for the conversation.
   const contents = history.map(msg => ({
-    role: msg.role,
-    parts: [{ text: msg.content }]
+    role: msg.role === 'model' ? 'model' : 'user',
+    parts: [{ text: msg.content || "..." }]
   }));
 
-  const currentParts: any[] = [{ text: prompt }];
+  // Add the latest user message with optional image.
+  const currentParts: any[] = [{ text: prompt || "Hello!" }];
   if (imageBase64) {
+    const cleanBase64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
     currentParts.push({
       inlineData: {
         mimeType: "image/jpeg",
-        data: imageBase64.split(",")[1]
+        data: cleanBase64
       }
     });
   }
@@ -45,35 +45,42 @@ export const generateAiResponse = async (
     },
   });
 
-  // Directly access the text property as per guidelines.
-  return response.text;
+  // Extract text directly using the getter.
+  return response.text || "";
 };
 
 export const generateSpeech = async (text: string, voiceName: string): Promise<string> => {
-  // Use strictly the required initialization format.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
   
-  // Filter out actions in asterisks for better TTS quality
-  const cleanText = text.replace(/\*.*?\*/g, '').trim();
+  // Clean text of emote markers (asterisks) for speech clarity.
+  const cleanText = text.replace(/\*.*?\*/g, '').replace(/\[.*?\]/g, '').trim();
+  if (!cleanText) return "";
   
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: cleanText }] }],
-    config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: voiceName as any },
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: cleanText }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voiceName as any },
+          },
         },
       },
-    },
-  });
+    });
 
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  return base64Audio ? `data:audio/pcm;base64,${base64Audio}` : "";
+    const parts = response.candidates?.[0]?.content?.parts;
+    const audioPart = parts?.find(p => p.inlineData);
+    const base64Audio = audioPart?.inlineData?.data;
+    
+    return base64Audio ? `data:audio/pcm;base64,${base64Audio}` : "";
+  } catch (error) {
+    console.error("Gemini TTS Error:", error);
+    return "";
+  }
 };
 
-// PCM Decoding Utility
 export function decodeBase64(base64: string) {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -90,6 +97,7 @@ export async function decodeAudioData(
   sampleRate: number = 24000,
   numChannels: number = 1,
 ): Promise<AudioBuffer> {
+  // Gemini TTS returns 16-bit PCM.
   const dataInt16 = new Int16Array(data.buffer);
   const frameCount = dataInt16.length / numChannels;
   const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
